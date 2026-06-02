@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import type { RaceConfig } from "../engine/types/races";
 import type { GearPreset } from "../engine/types/meshCatalog";
+import type { OffhandType } from "../engine/types/weaponSkills";
+import type { GrudgeCharacterDef } from "../game/GrudgeClasses";
 
 export type ArenaPhase = "select" | "playing" | "gameOver" | "victory";
 
@@ -21,7 +23,27 @@ interface ArenaStore {
   // Player selection
   selectedRace: RaceConfig | null;
   selectedPreset: GearPreset | null;
+  selectedCharDef: GrudgeCharacterDef | null;
   selectCharacter: (race: RaceConfig, preset: GearPreset) => void;
+  selectGrudgeChar: (def: GrudgeCharacterDef) => void;
+
+  // Equipment
+  equippedWeaponType: string;
+  offhandType: OffhandType;
+  rmbHeld: boolean;
+  equipWeapon: (weaponType: string) => void;
+  equipOffhand: (type: OffhandType) => void;
+  setRmbHeld: (held: boolean) => void;
+
+  // Game mode (Combat / Harvest / Build)
+  gameMode: "combat" | "harvest" | "build";
+  cycleMode: () => void;
+  setGameMode: (mode: "combat" | "harvest" | "build") => void;
+
+  // Skill cooldowns (skillKey → remaining ms)
+  skillCooldowns: Record<string, number>;
+  triggerCooldown: (skillKey: string, durationMs: number) => void;
+  tickCooldowns: (deltaMs: number) => void;
 
   // Player health
   playerHp: number;
@@ -48,8 +70,49 @@ export const useArenaStore = create<ArenaStore>((set, get) => ({
 
   selectedRace: null,
   selectedPreset: null,
+  selectedCharDef: null,
   selectCharacter: (race, preset) =>
     set({ selectedRace: race, selectedPreset: preset, phase: "playing" }),
+  selectGrudgeChar: (def) =>
+    set({
+      selectedRace: def.race,
+      selectedPreset: def.preset,
+      selectedCharDef: def,
+      equippedWeaponType: def.cls.weaponType,
+      offhandType: def.cls.offhand,
+      phase: "playing",
+    }),
+
+  equippedWeaponType: "sword",
+  offhandType: "none" as OffhandType,
+  rmbHeld: false,
+  equipWeapon: (weaponType) => set({ equippedWeaponType: weaponType }),
+  equipOffhand: (type) => set({ offhandType: type }),
+  setRmbHeld: (held) => set({ rmbHeld: held }),
+
+  gameMode: "combat" as const,
+  cycleMode: () =>
+    set((s) => {
+      const modes: ("combat" | "harvest" | "build")[] = ["combat", "harvest", "build"];
+      const idx = modes.indexOf(s.gameMode);
+      return { gameMode: modes[(idx + 1) % modes.length] };
+    }),
+  setGameMode: (mode) => set({ gameMode: mode }),
+
+  skillCooldowns: {},
+  triggerCooldown: (skillKey, durationMs) =>
+    set((s) => ({
+      skillCooldowns: { ...s.skillCooldowns, [skillKey]: durationMs },
+    })),
+  tickCooldowns: (deltaMs) =>
+    set((s) => {
+      const next: Record<string, number> = {};
+      for (const [k, v] of Object.entries(s.skillCooldowns)) {
+        const remaining = v - deltaMs;
+        if (remaining > 0) next[k] = remaining;
+      }
+      return { skillCooldowns: next };
+    }),
 
   playerHp: 100,
   playerMaxHp: 100,
@@ -87,5 +150,11 @@ export const useArenaStore = create<ArenaStore>((set, get) => ({
       kills: 0,
       selectedRace: null,
       selectedPreset: null,
+      selectedCharDef: null,
+      equippedWeaponType: "sword",
+      offhandType: "none" as OffhandType,
+      rmbHeld: false,
+      gameMode: "combat" as const,
+      skillCooldowns: {},
     }),
 }));

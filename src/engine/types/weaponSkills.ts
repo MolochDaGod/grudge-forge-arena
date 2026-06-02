@@ -74,9 +74,14 @@ export const SKILL_CATALOG: Record<string, SkillDef> = {
   blizzard:        { key: "blizzard",        name: "Blizzard",         element: "ice",       damage: 28, range: 12, cooldown: 10, description: "AoE frost storm" },
   healTouch:       { key: "healTouch",       name: "Heal Touch",       element: "heal",      damage: -20, range: 3, cooldown: 5,  description: "Heal self or ally" },
   regeneration:    { key: "regeneration",    name: "Regeneration",     element: "heal",      damage: -8, range: 0,  cooldown: 12, description: "Heal over time" },
-  // Shield skills (activated via RMB hold — replaces slots 1-2)
+  // Shield skills (activated via RMB hold — replaces slots 1-3)
   shieldBash:      { key: "shieldBash",      name: "Shield Bash",      element: "physical",  damage: 15, range: 2,  cooldown: 4,  description: "Stun target 1s, interrupt cast" },
   shieldParry:     { key: "shieldParry",     name: "Shield Parry",     element: "physical",  damage: 0,  range: 0,  cooldown: 6,  description: "Perfect block → counter window 0.5s" },
+  taunt:           { key: "taunt",           name: "Taunt",            element: "physical",  damage: 0,  range: 8,  cooldown: 10, description: "Force enemies to target you for 3s" },
+  // Tome skills (activated via RMB hold — replaces slots 1-3)
+  tomeHeal:        { key: "tomeHeal",        name: "Tome Heal",        element: "heal",      damage: -25, range: 3, cooldown: 5,  description: "Channel healing from the tome" },
+  tomeFireball:    { key: "tomeFireball",     name: "Tome Fireball",    element: "fire",      damage: 20, range: 18, cooldown: 3,  description: "Hurl a fire orb from the tome" },
+  tomeRegenerate:  { key: "tomeRegenerate",  name: "Tome Regen",       element: "heal",      damage: -10, range: 0, cooldown: 15, description: "Sustained heal-over-time from tome" },
 };
 
 // ── Base weapon → skill keys (default unlocked at mastery 0) ─────────────────
@@ -327,7 +332,10 @@ export function getOffhandModifier(offhandType: string): OffhandModifier | null 
 
 // ── Shield RMB override ───────────────────────────────────────────────────────
 
-export const SHIELD_RMB_SKILLS: string[] = ["shieldBash", "shieldParry"];
+export const SHIELD_RMB_SKILLS: string[] = ["shieldBash", "shieldParry", "taunt"];
+
+/** Tome RMB: heal / elemental / regen override for slots 1-3. */
+export const TOME_RMB_SKILLS: string[] = ["tomeHeal", "tomeFireball", "tomeRegenerate"];
 
 // ── Public API ────────────────────────────────────────────────────────────────
 // No class restrictions — any class can equip any weapon.
@@ -347,8 +355,14 @@ export function getSkillsForWeapon(weaponType: string): SkillDef[] {
 
 /**
  * Get the active hotbar skill list, accounting for off-hand modifier.
- * When `offhandType` is "shield" and `rmbHeld` is true, slots 1-2 swap
- * to shield bash/parry. Relics and tomes don't override hotbar slots.
+ *
+ * Shield + RMB: slots 1-3 become Shield Bash / Shield Parry / Taunt.
+ *   Slots 4-5 remain from weapon skills.
+ *
+ * Tome + RMB: slots 1-3 become Tome Heal / Tome Fireball / Tome Regen.
+ *   Slots 4-5 remain from weapon skills.
+ *
+ * Otherwise: all 5 slots from weapon skill tree.
  */
 export function getHotbarSkills(
   weaponType: string,
@@ -356,12 +370,24 @@ export function getHotbarSkills(
   rmbHeld = false,
 ): SkillDef[] {
   const base = getSkillsForWeapon(weaponType);
-  if (offhandType !== "shield" || !rmbHeld) return base;
-  const mod = OFFHAND_MODIFIERS.shield;
-  const shieldSkills = (mod.rmbSkills ?? SHIELD_RMB_SKILLS)
-    .filter(k => SKILL_CATALOG[k])
-    .map(k => SKILL_CATALOG[k]);
-  return [...shieldSkills, ...base.slice(2)];
+
+  if (!rmbHeld) return base;
+
+  if (offhandType === "shield") {
+    const shieldSkills = SHIELD_RMB_SKILLS
+      .filter(k => SKILL_CATALOG[k])
+      .map(k => SKILL_CATALOG[k]);
+    return [...shieldSkills, ...base.slice(3)];
+  }
+
+  if (offhandType === "tome") {
+    const tomeSkills = TOME_RMB_SKILLS
+      .filter(k => SKILL_CATALOG[k])
+      .map(k => SKILL_CATALOG[k]);
+    return [...tomeSkills, ...base.slice(3)];
+  }
+
+  return base;
 }
 
 /** Weapon type → animation pack mapping for ControllerAnimMap. */
