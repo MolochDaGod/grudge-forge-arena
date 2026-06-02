@@ -24,7 +24,8 @@ import { CharacterStateMachine, STATE } from "../engine/CharacterStateMachine";
 import { getAnimMapForWeapon, BASE_ANIM_MAP } from "../engine/ControllerAnimMap";
 import { assetUrl } from "../engine/assetUrl";
 import { AIBrain } from "./AIBrain";
-import { tryDamage, tickIFrames, type CombatEntity } from "./HealthSystem";
+import { tryDamage, tickIFrames, consumeKnockback, createCombatEntity, type CombatEntity } from "./HealthSystem";
+import { NavGrid } from "./NavGrid";
 import {
   generateIslandTerrain,
   colorTerrainByHeight,
@@ -242,10 +243,10 @@ function PlayerCharacter({ meshRef, terrainMesh }: {
     const sm = new CharacterStateMachine(ctrl);
     sm.transition(STATE.IDLE);
     const pos = new THREE.Vector3(0, 2, 10);
-    const entity: CombatEntity = {
+    const entity = createCombatEntity({
       id: "player", hp: 100, maxHp: 100, position: pos, sm,
-      iFrames: 0, dead: false, faction: "player", attackRange: 2.5, attackDamage: 15,
-    };
+      faction: "player", attackRange: 2.5, attackDamage: 15,
+    });
     return { ctrl, sm, pos, entity };
   }, []);
 
@@ -286,7 +287,12 @@ function PlayerCharacter({ meshRef, terrainMesh }: {
         }
 
         engine.sm.transition(snap.movement.sprint ? STATE.SPRINT : STATE.RUN);
-        if (meshRef.current) meshRef.current.rotation.y = Math.atan2(-dir.x, -dir.z);
+        if (meshRef.current) {
+          const rot = Math.atan2(-dir.x, -dir.z);
+          meshRef.current.rotation.y = rot;
+          // Sync facing angle for HealthSystem directional checks
+          engine.entity.facingAngle = Math.atan2(dir.z, dir.x);
+        }
       } else if (!engine.sm.isAttacking && !engine.sm.isBlocking) {
         engine.sm.rest();
       }
@@ -301,6 +307,17 @@ function PlayerCharacter({ meshRef, terrainMesh }: {
     if (snap.actions.jump) engine.sm.transition(STATE.JUMP);
     if (snap.actions.roll) engine.sm.transition(STATE.ROLL);
     if (snap.actions.interact) engine.sm.transition(STATE.HARVEST);
+
+    // Apply knockback
+    const kb = consumeKnockback(engine.entity, dtMs);
+    if (kb.dx !== 0 || kb.dz !== 0) {
+      engine.pos.x += kb.dx;
+      engine.pos.z += kb.dz;
+      if (terrainMesh) {
+        const h = sampleTerrainHeight(terrainMesh, engine.pos.x, engine.pos.z);
+        engine.pos.y = Math.max(h + 0.85, 0.35);
+      }
+    }
 
     // Sync
     engine.entity.hp = store.getState().playerHp;
@@ -324,11 +341,12 @@ function PlayerCharacter({ meshRef, terrainMesh }: {
 
 // ── Enemy NPC ──
 
-function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh }: {
+function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh, navGrid }: {
   index: number;
   spawnAngle: number;
   playerRef: React.RefObject<THREE.Mesh | null>;
   terrainMesh: THREE.Mesh | null;
+  navGrid: NavGrid | null;
 }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const store = useArenaStore;
@@ -345,12 +363,18 @@ function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh }: {
     sm.transition(STATE.IDLE);
     const pos = new THREE.Vector3(sx, spawnY, sz);
     const brain = new AIBrain(sm, pos, new THREE.Vector3(sx, spawnY, sz));
-    const entity: CombatEntity = {
+    const entity = createCombatEntity({
       id: `enemy-${index}`, hp: 80, maxHp: 80, position: pos, sm,
-      iFrames: 0, dead: false, faction: "enemy", attackRange: 2.5, attackDamage: 10,
-    };
+      faction: "enemy", attackRange: 2.5, attackDamage: 10,
+      onHit: () => brain.onHit(),
+    });
     return { ctrl, sm, pos, brain, entity };
   }, [sx, sz, spawnY, index]);
+
+  // Wire navGrid into brain when available
+  useEffect(() => {
+    if (navGrid) engine.brain.navGrid = navGrid;
+  }, [navGrid, engine.brain]);
 
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.05);
@@ -376,8 +400,22 @@ function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh }: {
         engine.pos.y = Math.max(h + 0.85, 0.35);
       }
 
+      // Apply knockback
+      const kb = consumeKnockback(engine.entity, dtMs);
+      if (kb.dx !== 0 || kb.dz !== 0) {
+        engine.pos.x += kb.dx;
+        engine.pos.z += kb.dz;
+      }
+
+      // Sync facing angle for directional damage
       if (dx !== 0 || dz !== 0) {
         if (meshRef.current) meshRef.current.rotation.y = Math.atan2(-dx, -dz);
+        engine.entity.facingAngle = Math.atan2(dz, dx);
+      } else if (engine.brain.facing.lengthSq() > 0) {
+        engine.entity.facingAngle = Math.atan2(engine.brain.facing.y, engine.brain.facing.x);
+        if (meshRef.current) {
+          meshRef.current.rotation.y = Math.atan2(-engine.brain.facing.x, -engine.brain.facing.y);
+        }
       }
 
       // Hit detection
@@ -388,7 +426,7 @@ function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh }: {
         const pDmg = tryDamage(pe, engine.entity);
         if (pDmg > 0) {
           store.getState().damageEnemy(engine.entity.id, pDmg);
-          if (engine.entity.hp - pDmg <= 0) store.getState().addKill();
+          if (engine.entity.hp <= 0) store.getState().addKill();
         }
       }
     }
@@ -416,10 +454,14 @@ function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh }: {
 function ForgeInner() {
   const playerRef = useRef<THREE.Mesh>(null);
   const [terrainMesh, setTerrainMesh] = useState<THREE.Mesh | null>(null);
+  const [navGrid, setNavGrid] = useState<NavGrid | null>(null);
   const setEnemies = useArenaStore((s) => s.setEnemies);
 
   const handleTerrainReady = useCallback((mesh: THREE.Mesh) => {
     setTerrainMesh(mesh);
+    // Build NavGrid from terrain (A* pathfinding for AI)
+    const grid = new NavGrid(mesh, { worldSize: ISLAND_SIZE, resolution: 64 });
+    setNavGrid(grid);
   }, []);
 
   useEffect(() => {
@@ -470,6 +512,7 @@ function ForgeInner() {
           spawnAngle={(i / ENEMY_COUNT) * Math.PI * 2}
           playerRef={playerRef}
           terrainMesh={terrainMesh}
+          navGrid={navGrid}
         />
       ))}
 
