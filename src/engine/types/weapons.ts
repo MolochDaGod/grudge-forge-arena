@@ -89,6 +89,44 @@ export const HAND_BONE: Record<WeaponHand, string | string[]> = {
   off:    "Bip001 L Hand",
 };
 
+// ── Craftpix weapon generator ───────────────────────────────────────────────
+
+const CPX_CDN = "https://assets.grudge-studio.com/weapons/craftpix";
+
+/** Default scale for craftpix models (they're large FBX exports → GLB) */
+const CPX_SCALES: Record<string, number> = {
+  sword: 0.01, dagger: 0.01, axe: 0.01, mace: 0.01,
+  hammer: 0.01, spear: 0.01, bow: 0.01, crossbow: 0.01,
+  staff: 0.01, wand: 0.01,
+};
+
+const TIER_NAMES = ["", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Ancient", "Artifact"];
+
+function cpxWeapons(
+  type: WeaponType,
+  baseName: string,
+  hands: 1 | 2,
+  hand: WeaponHand,
+  animPack: string,
+  count: number,
+  availTiers?: number[],
+): WeaponDef[] {
+  const tiers = availTiers ?? Array.from({ length: count }, (_, i) => i + 1);
+  return tiers.map((t) => ({
+    id: `cpx-${type}-t${t}`,
+    label: `${TIER_NAMES[t]} ${baseName}`,
+    type: type as WeaponType,
+    hands: hands as WeaponHands,
+    hand,
+    file: `${CPX_CDN}/${type}_t${t}.glb`,
+    tier: t,
+    animPack,
+    scale: CPX_SCALES[type] ?? 0.01,
+    posOffset: [0, 0, 0] as [number, number, number],
+    rotOffset: [0, 0, 0] as [number, number, number],
+  }));
+}
+
 // ─── Drop-in weapon registry ───────────────────────────────────────────────────
 // Add a new entry here when you drop a weapon FBX into an equipment/ folder.
 // Fields: id (unique), label, type, hands (1/2/"off"), hand (right/left/both/off),
@@ -233,41 +271,3 @@ export const WEAPON_REGISTRY: WeaponDef[] = [
   // ── Wands 1H ──────────────────────────────────────────────────────────────
   ...cpxWeapons("wand", "Wand", 1, "right", "magic", 6),
 ];
-
-// ── Craftpix weapon generator ───────────────────────────────────────────────
-
-const CPX_CDN = "https://assets.grudge-studio.com/weapons/craftpix";
-
-/** Default scale for craftpix models (they're large FBX exports → GLB) */
-const CPX_SCALES: Record<string, number> = {
-  sword: 0.01, dagger: 0.01, axe: 0.01, mace: 0.01,
-  hammer: 0.01, spear: 0.01, bow: 0.01, crossbow: 0.01,
-  staff: 0.01, wand: 0.01,
-};
-
-const TIER_NAMES = ["", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Ancient", "Artifact"];
-
-function cpxWeapons(
-  type: WeaponType,
-  baseName: string,
-  hands: 1 | 2,
-  hand: WeaponHand,
-  animPack: string,
-  count: number,
-  availTiers?: number[],
-): WeaponDef[] {
-  const tiers = availTiers ?? Array.from({ length: count }, (_, i) => i + 1);
-  return tiers.map((t) => ({
-    id: `cpx-${type}-t${t}`,
-    label: `${TIER_NAMES[t]} ${baseName}`,
-    type: type as WeaponType,
-    hands: hands as WeaponHands,
-    hand,
-    file: `${CPX_CDN}/${type}_t${t}.glb`,
-    tier: t,
-    animPack,
-    scale: CPX_SCALES[type] ?? 0.01,
-    posOffset: [0, 0, 0] as [number, number, number],
-    rotOffset: [0, 0, 0] as [number, number, number],
-  }));
-}
