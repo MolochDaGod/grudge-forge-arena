@@ -340,11 +340,12 @@ function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh, navGrid }: {
     return { ctrl, sm, pos, brain, entity };
   }, [sx, sz, spawnY, index]);
 
-  // When FBXCharacter loads, rewire engine
+  // When FBXCharacter loads, rewire engine + AI brain to use the real SM
   const handleCharReady = useCallback((ctrl: AnimController, sm: CharacterStateMachine) => {
     engine.ctrl = ctrl;
     engine.sm = sm;
     engine.entity.sm = sm;
+    engine.brain.sm = sm;  // critical: AI transitions must go to the active SM
     sm.transition(STATE.IDLE);
   }, [engine]);
 
