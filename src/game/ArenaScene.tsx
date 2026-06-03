@@ -16,16 +16,15 @@ import { Suspense, useRef, useEffect, useMemo, useState, useCallback } from "rea
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, Sky } from "@react-three/drei";
 import * as THREE from "three";
-import { FBXLoader } from "three-stdlib";
 import { useArenaStore } from "../stores/useArenaStore";
 import { InputManager } from "../engine/InputManager";
 import { AnimController } from "../engine/AnimController";
 import { CharacterStateMachine, STATE } from "../engine/CharacterStateMachine";
-import { getAnimMapForWeapon, BASE_ANIM_MAP } from "../engine/ControllerAnimMap";
-import { assetUrl } from "../engine/assetUrl";
 import { AIBrain } from "./AIBrain";
 import { tryDamage, tickIFrames, consumeKnockback, createCombatEntity, type CombatEntity } from "./HealthSystem";
 import { NavGrid } from "./NavGrid";
+import { FBXCharacter } from "./FBXCharacter";
+import { getAllCharacterDefs, type GrudgeCharacterDef } from "./GrudgeClasses";
 import {
   generateIslandTerrain,
   colorTerrainByHeight,
@@ -39,65 +38,11 @@ const PLAYER_SPEED = 6;
 const CAMERA_OFFSET = new THREE.Vector3(0, 6, 10);
 const ENEMY_COUNT = 3;
 
-// ── FBX + Animation Loader ──
-
-const fbxLoader = new FBXLoader();
-const fbxCache = new Map<string, THREE.Group>();
-
-async function loadFBX(url: string): Promise<THREE.Group> {
-  if (fbxCache.has(url)) return fbxCache.get(url)!.clone();
-  const group = await fbxLoader.loadAsync(url);
-  fbxCache.set(url, group);
-  return group.clone();
-}
-
-/**
- * Load animation FBX and extract the first AnimationClip.
- * Returns null if loading fails (CDN asset missing).
- */
-async function loadAnimClip(url: string): Promise<THREE.AnimationClip | null> {
-  try {
-    const g = await fbxLoader.loadAsync(url);
-    return g.animations[0] ?? null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Build an AnimController with real animation clips loaded from the CDN.
- * Falls back to stub clips for any that fail to load.
- */
-async function buildAnimController(
-  root: THREE.Object3D,
-  animMap: Record<string, string>,
-): Promise<AnimController> {
-  const mixer = new THREE.AnimationMixer(root);
-  const ctrl = new AnimController(mixer);
-
-  // Load all animation clips in parallel
-  const entries = Object.entries(animMap);
-  const clips = await Promise.all(
-    entries.map(async ([key, url]) => {
-      const clip = await loadAnimClip(url);
-      return { key, clip };
-    }),
-  );
-
-  for (const { key, clip } of clips) {
-    if (clip) {
-      clip.name = key;
-      ctrl.register(key, clip);
-    } else {
-      // Stub clip so the state machine doesn't crash
-      const stub = new THREE.AnimationClip(key, 0.5, [
-        new THREE.NumberKeyframeTrack(".visible", [0, 0.5], [1, 1]),
-      ]);
-      ctrl.register(key, stub);
-    }
-  }
-
-  return ctrl;
+// ── Pre-compute enemy class assignments (deterministic per slot) ──
+const ALL_DEFS = getAllCharacterDefs();
+function pickEnemyDef(index: number): GrudgeCharacterDef {
+  // Rotate through all 24 class/race combos deterministically
+  return ALL_DEFS[index % ALL_DEFS.length];
 }
 
 // ── Stub AnimController (instant, no CDN) ──
@@ -229,14 +174,15 @@ function HarvestableScatter({ terrainMesh }: { terrainMesh: THREE.Mesh | null })
   );
 }
 
-// ── Player Character ──
+// ── Player Character (FBX model) ──
 
-function PlayerCharacter({ meshRef, terrainMesh }: {
-  meshRef: React.RefObject<THREE.Mesh | null>;
+function PlayerCharacter({ groupRef, terrainMesh }: {
+  groupRef: React.RefObject<THREE.Group | null>;
   terrainMesh: THREE.Mesh | null;
 }) {
   const { camera } = useThree();
   const store = useArenaStore;
+  const charDef = useArenaStore((s) => s.selectedCharDef);
 
   const engine = useMemo(() => {
     const ctrl = createStubCtrl();
@@ -249,6 +195,15 @@ function PlayerCharacter({ meshRef, terrainMesh }: {
     });
     return { ctrl, sm, pos, entity };
   }, []);
+
+  // When FBXCharacter finishes loading, re-wire the SM with real controller
+  const handleCharReady = useCallback((ctrl: AnimController, sm: CharacterStateMachine) => {
+    // The FBXCharacter created its own SM — swap engine reference
+    engine.ctrl = ctrl;
+    engine.sm = sm;
+    engine.entity.sm = sm;
+    sm.transition(STATE.IDLE);
+  }, [engine]);
 
   const inputRef = useRef<InputManager | null>(null);
   const canvasEl = useThree((s) => s.gl.domElement);
@@ -280,17 +235,15 @@ function PlayerCharacter({ meshRef, terrainMesh }: {
         engine.pos.x += dir.x;
         engine.pos.z += dir.z;
 
-        // Snap to terrain height
         if (terrainMesh) {
           const h = sampleTerrainHeight(terrainMesh, engine.pos.x, engine.pos.z);
-          engine.pos.y = Math.max(h + 0.85, 0.35); // capsule half-height offset
+          engine.pos.y = Math.max(h + 0.05, 0.05);
         }
 
         engine.sm.transition(snap.movement.sprint ? STATE.SPRINT : STATE.RUN);
-        if (meshRef.current) {
+        if (groupRef.current) {
           const rot = Math.atan2(-dir.x, -dir.z);
-          meshRef.current.rotation.y = rot;
-          // Sync facing angle for HealthSystem directional checks
+          groupRef.current.rotation.y = rot;
           engine.entity.facingAngle = Math.atan2(dir.z, dir.x);
         }
       } else if (!engine.sm.isAttacking && !engine.sm.isBlocking) {
@@ -315,15 +268,15 @@ function PlayerCharacter({ meshRef, terrainMesh }: {
       engine.pos.z += kb.dz;
       if (terrainMesh) {
         const h = sampleTerrainHeight(terrainMesh, engine.pos.x, engine.pos.z);
-        engine.pos.y = Math.max(h + 0.85, 0.35);
+        engine.pos.y = Math.max(h + 0.05, 0.05);
       }
     }
 
     // Sync
     engine.entity.hp = store.getState().playerHp;
-    if (meshRef.current) {
-      meshRef.current.position.copy(engine.pos);
-      meshRef.current.userData = { entity: engine.entity };
+    if (groupRef.current) {
+      groupRef.current.position.copy(engine.pos);
+      groupRef.current.userData = { entity: engine.entity };
     }
 
     // Camera follow
@@ -332,30 +285,46 @@ function PlayerCharacter({ meshRef, terrainMesh }: {
   });
 
   return (
-    <mesh ref={meshRef} position={[0, 2, 10]} castShadow>
-      <capsuleGeometry args={[0.4, 1.0, 8, 16]} />
-      <meshStandardMaterial color="#4488ff" emissive="#112244" />
-    </mesh>
+    <group ref={groupRef} position={[0, 2, 10]}>
+      {/* Invisible collision capsule for hit detection */}
+      <mesh visible={false}>
+        <capsuleGeometry args={[0.4, 1.0, 4, 8]} />
+        <meshBasicMaterial />
+      </mesh>
+      {/* Real FBX character model */}
+      {charDef && (
+        <FBXCharacter
+          modelUrl={charDef.race.modelUrl}
+          textureUrl={charDef.race.textureUrl}
+          visibleMeshes={charDef.preset.visibleMeshes}
+          animPack={charDef.cls.animPack}
+          tintColor={charDef.cls.color}
+          onReady={handleCharReady}
+        />
+      )}
+    </group>
   );
 }
 
-// ── Enemy NPC ──
+// ── Enemy NPC (FBX model) ──
 
 function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh, navGrid }: {
   index: number;
   spawnAngle: number;
-  playerRef: React.RefObject<THREE.Mesh | null>;
+  playerRef: React.RefObject<THREE.Group | null>;
   terrainMesh: THREE.Mesh | null;
   navGrid: NavGrid | null;
 }) {
-  const meshRef = useRef<THREE.Mesh>(null);
+  const groupRef = useRef<THREE.Group>(null);
   const store = useArenaStore;
-  const COLORS = ["#ff4444", "#ff8800", "#cc44ff"];
+
+  // Deterministic enemy class for this slot
+  const enemyDef = useMemo(() => pickEnemyDef(index), [index]);
 
   const spawnRadius = 15 + Math.random() * 10;
   const sx = Math.cos(spawnAngle) * spawnRadius;
   const sz = Math.sin(spawnAngle) * spawnRadius;
-  const spawnY = terrainMesh ? sampleTerrainHeight(terrainMesh, sx, sz) + 0.85 : 0.85;
+  const spawnY = terrainMesh ? sampleTerrainHeight(terrainMesh, sx, sz) + 0.05 : 0.05;
 
   const engine = useMemo(() => {
     const ctrl = createStubCtrl();
@@ -370,6 +339,14 @@ function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh, navGrid }: {
     });
     return { ctrl, sm, pos, brain, entity };
   }, [sx, sz, spawnY, index]);
+
+  // When FBXCharacter loads, rewire engine
+  const handleCharReady = useCallback((ctrl: AnimController, sm: CharacterStateMachine) => {
+    engine.ctrl = ctrl;
+    engine.sm = sm;
+    engine.entity.sm = sm;
+    sm.transition(STATE.IDLE);
+  }, [engine]);
 
   // Wire navGrid into brain when available
   useEffect(() => {
@@ -397,7 +374,7 @@ function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh, navGrid }: {
       // Terrain snap
       if (terrainMesh) {
         const h = sampleTerrainHeight(terrainMesh, engine.pos.x, engine.pos.z);
-        engine.pos.y = Math.max(h + 0.85, 0.35);
+        engine.pos.y = Math.max(h + 0.05, 0.05);
       }
 
       // Apply knockback
@@ -409,12 +386,12 @@ function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh, navGrid }: {
 
       // Sync facing angle for directional damage
       if (dx !== 0 || dz !== 0) {
-        if (meshRef.current) meshRef.current.rotation.y = Math.atan2(-dx, -dz);
+        if (groupRef.current) groupRef.current.rotation.y = Math.atan2(-dx, -dz);
         engine.entity.facingAngle = Math.atan2(dz, dx);
       } else if (engine.brain.facing.lengthSq() > 0) {
         engine.entity.facingAngle = Math.atan2(engine.brain.facing.y, engine.brain.facing.x);
-        if (meshRef.current) {
-          meshRef.current.rotation.y = Math.atan2(-engine.brain.facing.x, -engine.brain.facing.y);
+        if (groupRef.current) {
+          groupRef.current.rotation.y = Math.atan2(-engine.brain.facing.x, -engine.brain.facing.y);
         }
       }
 
@@ -431,28 +408,38 @@ function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh, navGrid }: {
       }
     }
 
-    if (meshRef.current) {
-      meshRef.current.position.copy(engine.pos);
-      const mat = meshRef.current.material as THREE.MeshStandardMaterial;
-      mat.opacity = engine.entity.iFrames > 0 ? 0.5 : 1;
-      mat.transparent = engine.entity.iFrames > 0;
+    if (groupRef.current) {
+      groupRef.current.position.copy(engine.pos);
+      groupRef.current.userData = { entity: engine.entity };
     }
   });
 
   if (engine.entity.dead) return null;
 
   return (
-    <mesh ref={meshRef} position={[sx, spawnY, sz]} castShadow>
-      <capsuleGeometry args={[0.4, 1.0, 8, 16]} />
-      <meshStandardMaterial color={COLORS[index % COLORS.length]} emissive="#221111" />
-    </mesh>
+    <group ref={groupRef} position={[sx, spawnY, sz]}>
+      {/* Invisible collision capsule */}
+      <mesh visible={false}>
+        <capsuleGeometry args={[0.4, 1.0, 4, 8]} />
+        <meshBasicMaterial />
+      </mesh>
+      {/* Real FBX enemy model */}
+      <FBXCharacter
+        modelUrl={enemyDef.race.modelUrl}
+        textureUrl={enemyDef.race.textureUrl}
+        visibleMeshes={enemyDef.preset.visibleMeshes}
+        animPack={enemyDef.cls.animPack}
+        tintColor={enemyDef.cls.color}
+        onReady={handleCharReady}
+      />
+    </group>
   );
 }
 
 // ── ForgeInner (scene graph) ──
 
 function ForgeInner() {
-  const playerRef = useRef<THREE.Mesh>(null);
+  const playerRef = useRef<THREE.Group>(null);
   const [terrainMesh, setTerrainMesh] = useState<THREE.Mesh | null>(null);
   const [navGrid, setNavGrid] = useState<NavGrid | null>(null);
   const setEnemies = useArenaStore((s) => s.setEnemies);
@@ -503,7 +490,7 @@ function ForgeInner() {
       <HarvestableScatter terrainMesh={terrainMesh} />
 
       {/* Player */}
-      <PlayerCharacter meshRef={playerRef} terrainMesh={terrainMesh} />
+      <PlayerCharacter groupRef={playerRef} terrainMesh={terrainMesh} />
 
       {/* Enemy NPCs */}
       {Array.from({ length: ENEMY_COUNT }, (_, i) => (
