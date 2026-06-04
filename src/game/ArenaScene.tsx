@@ -26,12 +26,16 @@ import { NavGrid } from "./NavGrid";
 import { FBXCharacter } from "./FBXCharacter";
 import { getAllCharacterDefs, type GrudgeCharacterDef } from "./GrudgeClasses";
 import { VillageLayout } from "./VillageLayout";
+import { ColliderSystem } from "./ColliderSystem";
 import {
   generateIslandTerrain,
   colorTerrainByHeight,
   sampleTerrainHeight,
   generateScatterPositions,
 } from "./IslandTerrain";
+
+// Shared collider instance — built once when terrain loads
+const collider = new ColliderSystem();
 
 // ── Constants ──
 const ISLAND_SIZE = 160;
@@ -70,8 +74,8 @@ function IslandTerrainMesh({ onReady }: { onReady: (mesh: THREE.Mesh) => void })
   const meshRef = useRef<THREE.Mesh>(null);
 
   const geo = useMemo(() => {
-    const g = generateIslandTerrain({ size: ISLAND_SIZE, resolution: 128, seed: 42, maxHeight: 8 });
-    colorTerrainByHeight(g, 8);
+    const g = generateIslandTerrain({ size: ISLAND_SIZE, resolution: 192, seed: 42, maxHeight: 2.5 });
+    colorTerrainByHeight(g, 2.5);
     return g;
   }, []);
 
@@ -237,7 +241,7 @@ function PlayerCharacter({ groupRef, terrainMesh }: {
         engine.pos.z += dir.z;
 
         if (terrainMesh) {
-          const h = sampleTerrainHeight(terrainMesh, engine.pos.x, engine.pos.z);
+          const h = collider.heightAt(engine.pos.x, engine.pos.z);
           engine.pos.y = Math.max(h + 0.05, 0.05);
         }
 
@@ -268,7 +272,7 @@ function PlayerCharacter({ groupRef, terrainMesh }: {
       engine.pos.x += kb.dx;
       engine.pos.z += kb.dz;
       if (terrainMesh) {
-        const h = sampleTerrainHeight(terrainMesh, engine.pos.x, engine.pos.z);
+        const h = collider.heightAt(engine.pos.x, engine.pos.z);
         engine.pos.y = Math.max(h + 0.05, 0.05);
       }
     }
@@ -379,7 +383,7 @@ function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh, navGrid }: {
 
       // Terrain snap
       if (terrainMesh) {
-        const h = sampleTerrainHeight(terrainMesh, engine.pos.x, engine.pos.z);
+        const h = collider.heightAt(engine.pos.x, engine.pos.z);
         engine.pos.y = Math.max(h + 0.05, 0.05);
       }
 
@@ -389,7 +393,7 @@ function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh, navGrid }: {
         engine.pos.x += kb.dx;
         engine.pos.z += kb.dz;
         if (terrainMesh) {
-          const h2 = sampleTerrainHeight(terrainMesh, engine.pos.x, engine.pos.z);
+          const h2 = collider.heightAt(engine.pos.x, engine.pos.z);
           engine.pos.y = Math.max(h2 + 0.05, 0.05);
         }
       }
@@ -456,6 +460,8 @@ function ForgeInner() {
 
   const handleTerrainReady = useCallback((mesh: THREE.Mesh) => {
     setTerrainMesh(mesh);
+    // Build BVH collider for accelerated raycasting
+    collider.buildFromSingleMesh(mesh);
     // Build NavGrid from terrain (A* pathfinding for AI)
     const grid = new NavGrid(mesh, { worldSize: ISLAND_SIZE, resolution: 64 });
     setNavGrid(grid);
