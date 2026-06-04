@@ -322,24 +322,28 @@ function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh, navGrid }: {
   // Deterministic enemy class for this slot
   const enemyDef = useMemo(() => pickEnemyDef(index), [index]);
 
-  const spawnRadius = 25 + Math.random() * 20;
-  const sx = Math.cos(spawnAngle) * spawnRadius;
-  const sz = Math.sin(spawnAngle) * spawnRadius;
-  const spawnY = terrainMesh ? sampleTerrainHeight(terrainMesh, sx, sz) + 0.05 : 0.05;
+  // Stable spawn position — must NOT use Math.random() at render-level
+  // or the engine useMemo deps change every frame and destroy the AI brain
+  const spawn = useMemo(() => {
+    const radius = 25 + ((index * 7 + 13) % 20);
+    const sx = Math.cos(spawnAngle) * radius;
+    const sz = Math.sin(spawnAngle) * radius;
+    return { sx, sz };
+  }, [index, spawnAngle]);
 
   const engine = useMemo(() => {
     const ctrl = createStubCtrl();
     const sm = new CharacterStateMachine(ctrl);
     sm.transition(STATE.IDLE);
-    const pos = new THREE.Vector3(sx, spawnY, sz);
-    const brain = new AIBrain(sm, pos, new THREE.Vector3(sx, spawnY, sz));
+    const pos = new THREE.Vector3(spawn.sx, 0.05, spawn.sz);
+    const brain = new AIBrain(sm, pos, new THREE.Vector3(spawn.sx, 0.05, spawn.sz));
     const entity = createCombatEntity({
       id: `enemy-${index}`, hp: 80, maxHp: 80, position: pos, sm,
       faction: "enemy", attackRange: 2.5, attackDamage: 10,
       onHit: () => brain.onHit(),
     });
     return { ctrl, sm, pos, brain, entity };
-  }, [sx, sz, spawnY, index]);
+  }, [spawn, index]);
 
   // When FBXCharacter loads, rewire engine + AI brain to use the real SM
   const handleCharReady = useCallback((ctrl: AnimController, sm: CharacterStateMachine) => {
@@ -384,6 +388,10 @@ function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh, navGrid }: {
       if (kb.dx !== 0 || kb.dz !== 0) {
         engine.pos.x += kb.dx;
         engine.pos.z += kb.dz;
+        if (terrainMesh) {
+          const h2 = sampleTerrainHeight(terrainMesh, engine.pos.x, engine.pos.z);
+          engine.pos.y = Math.max(h2 + 0.05, 0.05);
+        }
       }
 
       // Sync facing angle for directional damage
@@ -419,7 +427,7 @@ function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh, navGrid }: {
   if (engine.entity.dead) return null;
 
   return (
-    <group ref={groupRef} position={[sx, spawnY, sz]}>
+    <group ref={groupRef} position={[spawn.sx, 0.05, spawn.sz]}>
       {/* Invisible collision capsule */}
       <mesh visible={false}>
         <capsuleGeometry args={[0.4, 1.0, 4, 8]} />
