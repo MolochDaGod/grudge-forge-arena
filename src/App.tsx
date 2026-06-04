@@ -5,6 +5,7 @@ import { ArenaScene } from "./game/ArenaScene";
 import { HUD } from "./ui/HUD";
 import { GameOver } from "./ui/GameOver";
 import { LoadingScreen } from "./ui/LoadingScreen";
+import { MapSelect } from "./ui/MapSelect";
 import { GameDataClient } from "./api/GameDataClient";
 import { preloadGameAssets } from "./game/AssetPreloader";
 import { getAllCharacterDefs } from "./game/GrudgeClasses";
@@ -69,6 +70,7 @@ export function App() {
   const phase = useArenaStore((s) => s.phase);
 
   if (phase === "select") return <CharacterSelect />;
+  if (phase === "mapSelect") return <MapSelect />;
   if (phase === "loading") return <LoadingScreen />;
 
   return (

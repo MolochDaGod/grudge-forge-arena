@@ -27,6 +27,7 @@ import { FBXCharacter } from "./FBXCharacter";
 import { getAllCharacterDefs, type GrudgeCharacterDef } from "./GrudgeClasses";
 import { VillageLayout } from "./VillageLayout";
 import { ColliderSystem } from "./ColliderSystem";
+import { GLBMap } from "./GLBMap";
 import {
   generateIslandTerrain,
   colorTerrainByHeight,
@@ -456,7 +457,11 @@ function ForgeInner() {
   const playerRef = useRef<THREE.Group>(null);
   const [terrainMesh, setTerrainMesh] = useState<THREE.Mesh | null>(null);
   const [navGrid, setNavGrid] = useState<NavGrid | null>(null);
+  const [mapReady, setMapReady] = useState(false);
   const setEnemies = useArenaStore((s) => s.setEnemies);
+  const selectedMap = useArenaStore((s) => s.selectedMap);
+
+  const isGlbMap = selectedMap?.type === "glb";
 
   const handleTerrainReady = useCallback((mesh: THREE.Mesh) => {
     setTerrainMesh(mesh);
@@ -465,6 +470,12 @@ function ForgeInner() {
     // Build NavGrid from terrain (A* pathfinding for AI)
     const grid = new NavGrid(mesh, { worldSize: ISLAND_SIZE, resolution: 64 });
     setNavGrid(grid);
+    setMapReady(true);
+  }, []);
+
+  const handleGlbReady = useCallback((meshes: THREE.Mesh[]) => {
+    // collider is built inside GLBMap; NavGrid not applicable for GLB maps
+    setMapReady(true);
   }, []);
 
   useEffect(() => {
@@ -477,36 +488,49 @@ function ForgeInner() {
     );
   }, [setEnemies]);
 
+  const ambientIntensity = selectedMap?.ambientLight ?? 0.35;
+
   return (
     <>
-      {/* Sky */}
-      <Sky sunPosition={[100, 60, 50]} turbidity={3} rayleigh={0.5} />
+      {/* Sky — cave maps get no sky, just dark ambient */}
+      {selectedMap?.sky !== "cave" && (
+        <Sky sunPosition={[100, 60, 50]} turbidity={3} rayleigh={0.5} />
+      )}
 
       {/* Lighting */}
-      <ambientLight intensity={0.35} />
-      <directionalLight
-        position={[30, 40, 20]} intensity={1.5} castShadow
-        shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-50} shadow-camera-right={50}
-        shadow-camera-top={50} shadow-camera-bottom={-50}
-        shadow-camera-near={1} shadow-camera-far={120}
-      />
-      <hemisphereLight args={["#87ceeb", "#3a5a2a", 0.4]} />
+      <ambientLight intensity={ambientIntensity} />
+      {selectedMap?.sky !== "cave" && (
+        <directionalLight
+          position={[30, 40, 20]} intensity={1.5} castShadow
+          shadow-mapSize={[2048, 2048]}
+          shadow-camera-left={-50} shadow-camera-right={50}
+          shadow-camera-top={50} shadow-camera-bottom={-50}
+          shadow-camera-near={1} shadow-camera-far={120}
+        />
+      )}
+      <hemisphereLight args={[
+        selectedMap?.sky === "cave" ? "#443322" : "#87ceeb",
+        selectedMap?.sky === "cave" ? "#221111" : "#3a5a2a",
+        selectedMap?.sky === "cave" ? 0.3 : 0.4,
+      ]} />
 
-      {/* Water */}
-      <WaterPlane />
-
-      {/* Island terrain */}
-      <IslandTerrainMesh onReady={handleTerrainReady} />
-
-      {/* Village (center of map) */}
-      <VillageLayout />
-
-      {/* Nature scatter */}
-      <NatureScatter terrainMesh={terrainMesh} />
-
-      {/* Harvestable nodes */}
-      <HarvestableScatter terrainMesh={terrainMesh} />
+      {/* GLB Map or Procedural Map */}
+      {isGlbMap && selectedMap ? (
+        <GLBMap mapDef={selectedMap} collider={collider} onReady={handleGlbReady} />
+      ) : (
+        <>
+          {/* Water */}
+          <WaterPlane />
+          {/* Island terrain */}
+          <IslandTerrainMesh onReady={handleTerrainReady} />
+          {/* Village (center of map) */}
+          <VillageLayout />
+          {/* Nature scatter */}
+          <NatureScatter terrainMesh={terrainMesh} />
+          {/* Harvestable nodes */}
+          <HarvestableScatter terrainMesh={terrainMesh} />
+        </>
+      )}
 
       {/* Player */}
       <PlayerCharacter groupRef={playerRef} terrainMesh={terrainMesh} />

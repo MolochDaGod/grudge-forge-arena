@@ -3,8 +3,9 @@ import type { RaceConfig } from "../engine/types/races";
 import type { GearPreset } from "../engine/types/meshCatalog";
 import type { OffhandType, BackItemDef } from "../engine/types/weaponSkills";
 import type { GrudgeCharacterDef } from "../game/GrudgeClasses";
+import type { MapDef } from "../game/MapDefinitions";
 
-export type ArenaPhase = "select" | "loading" | "playing" | "gameOver" | "victory";
+export type ArenaPhase = "select" | "mapSelect" | "loading" | "playing" | "gameOver" | "victory";
 
 export interface EnemyState {
   id: string;
@@ -29,6 +30,10 @@ interface ArenaStore {
   selectedCharDef: GrudgeCharacterDef | null;
   selectCharacter: (race: RaceConfig, preset: GearPreset) => void;
   selectGrudgeChar: (def: GrudgeCharacterDef) => void;
+
+  // Map selection
+  selectedMap: MapDef | null;
+  selectMap: (map: MapDef) => void;
 
   // Equipment
   equippedWeaponType: string;
@@ -91,7 +96,7 @@ export const useArenaStore = create<ArenaStore>((set, get) => ({
   selectedPreset: null,
   selectedCharDef: null,
   selectCharacter: (race, preset) =>
-    set({ selectedRace: race, selectedPreset: preset, phase: "loading", loadProgress: 0, loadStatus: "Initializing..." }),
+    set({ selectedRace: race, selectedPreset: preset, phase: "mapSelect" }),
   selectGrudgeChar: (def) =>
     set({
       selectedRace: def.race,
@@ -99,10 +104,12 @@ export const useArenaStore = create<ArenaStore>((set, get) => ({
       selectedCharDef: def,
       equippedWeaponType: def.cls.weaponType,
       offhandType: def.cls.offhand,
-      phase: "loading",
-      loadProgress: 0,
-      loadStatus: "Initializing...",
+      phase: "mapSelect",
     }),
+
+  selectedMap: null,
+  selectMap: (map) =>
+    set({ selectedMap: map, phase: "loading", loadProgress: 0, loadStatus: "Initializing..." }),
 
   equippedWeaponType: "sword",
   offhandType: "none" as OffhandType,
@@ -193,6 +200,7 @@ export const useArenaStore = create<ArenaStore>((set, get) => ({
       selectedRace: null,
       selectedPreset: null,
       selectedCharDef: null,
+      selectedMap: null,
       equippedBackItem: null,
       backItemCooldown: 0,
       equippedWeaponType: "sword",
