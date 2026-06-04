@@ -3,6 +3,14 @@ import { useArenaStore } from "../stores/useArenaStore";
 import { RACES } from "../engine/types/races";
 import { getClassesForRace, CLASS_ABILITIES, type GrudgeCharacterDef } from "../game/GrudgeClasses";
 
+// Class → craftpix RPG icon mapping
+const CLASS_ICONS: Record<string, string> = {
+  warrior: "/ui/icons/Icon_Sword_128.png",
+  mage:    "/ui/icons/Icon_Fireball_128.png",
+  ranger:  "/ui/icons/Icon_Arrows_128.png",
+  worge:   "/ui/icons/Icon_Leafs_128.png",
+};
+
 export function CharacterSelect() {
   const selectChar = useArenaStore((s) => s.selectGrudgeChar);
   const [hoveredRace, setHoveredRace] = useState<string>(RACES[0].id);
@@ -34,8 +42,11 @@ export function CharacterSelect() {
           <button key={def.grudgeId} onClick={() => selectChar(def)}
             style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:10,padding:20,borderRadius:12,background:"#1e293bee",border:"1px solid #334155",cursor:"pointer",width:190,transition:"all 0.2s",textAlign:"center" }}>
             {/* Class icon */}
-            <div style={{ width:56,height:56,borderRadius:"50%",background:def.cls.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:900,color:"#fff" }}>
-              {def.cls.label[0]}
+            <div style={{ width:64,height:64,borderRadius:"50%",background:`radial-gradient(circle at 30% 30%, ${def.cls.color}44, ${def.cls.color})`,border:`3px solid ${def.cls.color}`,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 0 12px ${def.cls.color}40` }}>
+              <img src={CLASS_ICONS[def.cls.id] ?? "/ui/icons/Icon_Shield_128.png"} alt={def.cls.label}
+                style={{ width:40,height:40,objectFit:"contain",filter:"drop-shadow(0 2px 4px rgba(0,0,0,0.6))" }}
+                onError={(e) => { (e.target as HTMLImageElement).style.display="none"; (e.target as HTMLImageElement).parentElement!.textContent = def.cls.label[0]; }}
+              />
             </div>
             <div>
               <div style={{ fontSize:15,fontWeight:700,color:"#f1f5f9" }}>{def.cls.label}</div>

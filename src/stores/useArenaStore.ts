@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { RaceConfig } from "../engine/types/races";
 import type { GearPreset } from "../engine/types/meshCatalog";
-import type { OffhandType } from "../engine/types/weaponSkills";
+import type { OffhandType, BackItemDef } from "../engine/types/weaponSkills";
 import type { GrudgeCharacterDef } from "../game/GrudgeClasses";
 
 export type ArenaPhase = "select" | "playing" | "gameOver" | "victory";
@@ -39,6 +39,13 @@ interface ArenaStore {
   gameMode: "combat" | "harvest" | "build";
   cycleMode: () => void;
   setGameMode: (mode: "combat" | "harvest" | "build") => void;
+
+  // Back item (cape / wings)
+  equippedBackItem: BackItemDef | null;
+  backItemCooldown: number; // remaining ms
+  equipBackItem: (item: BackItemDef | null) => void;
+  activateBackItem: () => void;
+  tickBackItemCd: (deltaMs: number) => void;
 
   // Skill cooldowns (skillKey → remaining ms)
   skillCooldowns: Record<string, number>;
@@ -105,6 +112,17 @@ export const useArenaStore = create<ArenaStore>((set, get) => ({
     }),
   setGameMode: (mode) => set({ gameMode: mode }),
 
+  equippedBackItem: null,
+  backItemCooldown: 0,
+  equipBackItem: (item) => set({ equippedBackItem: item, backItemCooldown: 0 }),
+  activateBackItem: () => {
+    const { equippedBackItem, backItemCooldown } = get();
+    if (!equippedBackItem || backItemCooldown > 0) return;
+    set({ backItemCooldown: equippedBackItem.active.cooldown * 1000 });
+  },
+  tickBackItemCd: (deltaMs) =>
+    set((s) => ({ backItemCooldown: Math.max(0, s.backItemCooldown - deltaMs) })),
+
   skillCooldowns: {},
   triggerCooldown: (skillKey, durationMs) =>
     set((s) => ({
@@ -167,6 +185,8 @@ export const useArenaStore = create<ArenaStore>((set, get) => ({
       selectedRace: null,
       selectedPreset: null,
       selectedCharDef: null,
+      equippedBackItem: null,
+      backItemCooldown: 0,
       equippedWeaponType: "sword",
       offhandType: "none" as OffhandType,
       rmbHeld: false,

@@ -4,6 +4,7 @@ import { ModeIndicator } from "./ModeIndicator";
 import { WeaponDropdown } from "./WeaponDropdown";
 import { PlayerFrame } from "./PlayerFrame";
 import { TargetFrame } from "./TargetFrame";
+import { BackItemPanel } from "./BackItemPanel";
 
 export function HUD() {
   const enemies = useArenaStore((s) => s.enemies);
@@ -31,6 +32,9 @@ export function HUD() {
 
       {/* Weapon dropdown (right side) */}
       <WeaponDropdown />
+
+      {/* Back item (capes / wings) */}
+      <BackItemPanel />
 
       {/* Mode tabs (Combat / Harvest / Build) */}
       <ModeIndicator />
