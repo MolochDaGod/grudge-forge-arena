@@ -61,9 +61,11 @@ export function ActionBar() {
               position: "absolute", top: 2, left: 4, fontSize: 9, color: "#64748b",
               fontWeight: 700, fontFamily: "monospace",
             }}>{i + 1}</div>
-            {/* Icon */}
-            <div style={{ fontSize: 20, lineHeight: 1 }}>
-              {skill ? ELEMENT_ICONS[skill.element] : "·"}
+            {/* Icon — CDN image if available, else element emoji */}
+            <div style={{ fontSize: 20, lineHeight: 1, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {skill?.icon ? (
+                <img src={skill.icon} alt={skill.name} style={{ width: 28, height: 28, objectFit: "contain", borderRadius: 2, filter: onCd ? "grayscale(80%)" : "none" }} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).parentElement!.textContent = ELEMENT_ICONS[skill.element]; }} />
+              ) : skill ? ELEMENT_ICONS[skill.element] : "·"}
             </div>
             {/* Name */}
             <div style={{
