@@ -4,7 +4,7 @@ import type { GearPreset } from "../engine/types/meshCatalog";
 import type { OffhandType, BackItemDef } from "../engine/types/weaponSkills";
 import type { GrudgeCharacterDef } from "../game/GrudgeClasses";
 
-export type ArenaPhase = "select" | "playing" | "gameOver" | "victory";
+export type ArenaPhase = "select" | "loading" | "playing" | "gameOver" | "victory";
 
 export interface EnemyState {
   id: string;
@@ -19,6 +19,9 @@ export interface EnemyState {
 interface ArenaStore {
   phase: ArenaPhase;
   setPhase: (p: ArenaPhase) => void;
+  loadProgress: number;    // 0-100
+  loadStatus: string;      // e.g. "Generating terrain..."
+  setLoadProgress: (pct: number, status: string) => void;
 
   // Player selection
   selectedRace: RaceConfig | null;
@@ -80,12 +83,15 @@ interface ArenaStore {
 export const useArenaStore = create<ArenaStore>((set, get) => ({
   phase: "select",
   setPhase: (phase) => set({ phase }),
+  loadProgress: 0,
+  loadStatus: "",
+  setLoadProgress: (pct, status) => set({ loadProgress: pct, loadStatus: status }),
 
   selectedRace: null,
   selectedPreset: null,
   selectedCharDef: null,
   selectCharacter: (race, preset) =>
-    set({ selectedRace: race, selectedPreset: preset, phase: "playing" }),
+    set({ selectedRace: race, selectedPreset: preset, phase: "loading", loadProgress: 0, loadStatus: "Initializing..." }),
   selectGrudgeChar: (def) =>
     set({
       selectedRace: def.race,
@@ -93,7 +99,9 @@ export const useArenaStore = create<ArenaStore>((set, get) => ({
       selectedCharDef: def,
       equippedWeaponType: def.cls.weaponType,
       offhandType: def.cls.offhand,
-      phase: "playing",
+      phase: "loading",
+      loadProgress: 0,
+      loadStatus: "Initializing...",
     }),
 
   equippedWeaponType: "sword",
