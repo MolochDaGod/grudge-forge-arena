@@ -25,6 +25,7 @@ import { tryDamage, tickIFrames, consumeKnockback, createCombatEntity, type Comb
 import { NavGrid } from "./NavGrid";
 import { FBXCharacter } from "./FBXCharacter";
 import { getAllCharacterDefs, type GrudgeCharacterDef } from "./GrudgeClasses";
+import { VillageLayout } from "./VillageLayout";
 import {
   generateIslandTerrain,
   colorTerrainByHeight,
@@ -33,10 +34,10 @@ import {
 } from "./IslandTerrain";
 
 // ── Constants ──
-const ISLAND_SIZE = 80;
+const ISLAND_SIZE = 160;
 const PLAYER_SPEED = 6;
 const CAMERA_OFFSET = new THREE.Vector3(0, 6, 10);
-const ENEMY_COUNT = 3;
+const ENEMY_COUNT = 5;
 
 // ── Pre-compute enemy class assignments (deterministic per slot) ──
 const ALL_DEFS = getAllCharacterDefs();
@@ -89,8 +90,8 @@ function IslandTerrainMesh({ onReady }: { onReady: (mesh: THREE.Mesh) => void })
 
 function WaterPlane() {
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 0]}>
-      <planeGeometry args={[200, 200]} />
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.3, 0]}>
+      <planeGeometry args={[400, 400]} />
       <meshStandardMaterial color="#1a4a6b" transparent opacity={0.7} roughness={0.2} metalness={0.1} />
     </mesh>
   );
@@ -125,7 +126,7 @@ function HarvestableNode({ position, type }: { position: THREE.Vector3; type: "o
 function NatureScatter({ terrainMesh }: { terrainMesh: THREE.Mesh | null }) {
   const positions = useMemo(() => {
     if (!terrainMesh) return [];
-    return generateScatterPositions(terrainMesh, 60, ISLAND_SIZE, 0.5, 777);
+    return generateScatterPositions(terrainMesh, 120, ISLAND_SIZE, 0.2, 777);
   }, [terrainMesh]);
 
   return (
@@ -163,7 +164,7 @@ function HarvestableScatter({ terrainMesh }: { terrainMesh: THREE.Mesh | null })
   const nodes = useMemo(() => {
     if (!terrainMesh) return [];
     const types: ("ore" | "wood" | "herb")[] = ["ore", "wood", "herb"];
-    const positions = generateScatterPositions(terrainMesh, 15, ISLAND_SIZE, 0.8, 999);
+    const positions = generateScatterPositions(terrainMesh, 30, ISLAND_SIZE, 0.2, 999);
     return positions.map((pos, i) => ({ pos, type: types[i % types.length] }));
   }, [terrainMesh]);
 
@@ -321,7 +322,7 @@ function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh, navGrid }: {
   // Deterministic enemy class for this slot
   const enemyDef = useMemo(() => pickEnemyDef(index), [index]);
 
-  const spawnRadius = 15 + Math.random() * 10;
+  const spawnRadius = 25 + Math.random() * 20;
   const sx = Math.cos(spawnAngle) * spawnRadius;
   const sz = Math.sin(spawnAngle) * spawnRadius;
   const spawnY = terrainMesh ? sampleTerrainHeight(terrainMesh, sx, sz) + 0.05 : 0.05;
@@ -483,6 +484,9 @@ function ForgeInner() {
 
       {/* Island terrain */}
       <IslandTerrainMesh onReady={handleTerrainReady} />
+
+      {/* Village (center of map) */}
+      <VillageLayout />
 
       {/* Nature scatter */}
       <NatureScatter terrainMesh={terrainMesh} />

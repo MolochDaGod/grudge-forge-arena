@@ -82,11 +82,11 @@ export interface IslandConfig {
 }
 
 const DEFAULT_CONFIG: IslandConfig = {
-  size: 80,
-  resolution: 128,
+  size: 160,
+  resolution: 192,
   seed: 42,
-  maxHeight: 8,
-  waterLevel: -0.5,
+  maxHeight: 2.5,
+  waterLevel: -0.3,
 };
 
 /**
@@ -109,7 +109,7 @@ export function generateIslandTerrain(cfg?: Partial<IslandConfig>) {
     // Circular falloff — distance from center normalized to 0..1
     const dx = x / half, dz = z / half;
     const distSq = dx * dx + dz * dz;
-    const falloff = Math.max(0, 1 - distSq * 1.2); // smooth edge
+    const falloff = Math.max(0, 1 - distSq * 0.8); // gentler edge — more usable area
 
     // FBM noise for organic shape
     const nx = x / c.size;
@@ -137,15 +137,16 @@ export function colorTerrainByHeight(geo: THREE.BufferGeometry, maxHeight: numbe
   const pos = geo.attributes.position;
   const colors = new Float32Array(pos.count * 3);
 
-  // Color ramp: water → sand → grass → rock → snow
+  // Color ramp: water → sand → grass → dirt → rock (flatter terrain, lower thresholds)
   const ramp: [number, number, number, number][] = [
-    [-1, 0.18, 0.30, 0.45],  // deep water — dark blue
-    [0.0, 0.58, 0.52, 0.38], // sand — warm tan
-    [0.5, 0.28, 0.45, 0.22], // grass — muted green
-    [3.0, 0.38, 0.35, 0.28], // dirt — brown
-    [5.0, 0.45, 0.42, 0.40], // rock — grey
-    [7.0, 0.55, 0.53, 0.50], // high rock
-    [9.0, 0.75, 0.73, 0.72], // snow
+    [-1,   0.18, 0.30, 0.45],  // deep water — dark blue
+    [-0.1, 0.50, 0.46, 0.34],  // wet sand
+    [0.0,  0.58, 0.52, 0.38],  // sand — warm tan
+    [0.15, 0.32, 0.48, 0.24],  // grass — muted green
+    [0.6,  0.26, 0.42, 0.20],  // deeper grass
+    [1.2,  0.38, 0.35, 0.28],  // dirt — brown
+    [1.8,  0.45, 0.42, 0.40],  // rock — grey
+    [2.5,  0.52, 0.50, 0.48],  // high rock
   ];
 
   for (let i = 0; i < pos.count; i++) {

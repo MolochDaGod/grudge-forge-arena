@@ -45,11 +45,17 @@ interface ArenaStore {
   triggerCooldown: (skillKey: string, durationMs: number) => void;
   tickCooldowns: (deltaMs: number) => void;
 
-  // Player health
+  // Player health + resources
   playerHp: number;
   playerMaxHp: number;
+  playerMp: number;
+  playerMaxMp: number;
+  playerSp: number;
+  playerMaxSp: number;
   damagePlayer: (amount: number) => void;
   healPlayer: (amount: number) => void;
+  useMana: (amount: number) => void;
+  useStamina: (amount: number) => void;
 
   // Enemies
   enemies: EnemyState[];
@@ -116,6 +122,10 @@ export const useArenaStore = create<ArenaStore>((set, get) => ({
 
   playerHp: 100,
   playerMaxHp: 100,
+  playerMp: 80,
+  playerMaxMp: 80,
+  playerSp: 100,
+  playerMaxSp: 100,
   damagePlayer: (amount) => {
     const next = Math.max(0, get().playerHp - amount);
     set({ playerHp: next });
@@ -123,6 +133,10 @@ export const useArenaStore = create<ArenaStore>((set, get) => ({
   },
   healPlayer: (amount) =>
     set((s) => ({ playerHp: Math.min(s.playerMaxHp, s.playerHp + amount) })),
+  useMana: (amount) =>
+    set((s) => ({ playerMp: Math.max(0, s.playerMp - amount) })),
+  useStamina: (amount) =>
+    set((s) => ({ playerSp: Math.max(0, s.playerSp - amount) })),
 
   enemies: [],
   setEnemies: (enemies) => set({ enemies }),
@@ -146,6 +160,8 @@ export const useArenaStore = create<ArenaStore>((set, get) => ({
     set({
       phase: "select",
       playerHp: 100,
+      playerMp: 80,
+      playerSp: 100,
       enemies: [],
       kills: 0,
       selectedRace: null,
