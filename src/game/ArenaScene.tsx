@@ -28,6 +28,8 @@ import { getAllCharacterDefs, type GrudgeCharacterDef } from "./GrudgeClasses";
 import { VillageLayout } from "./VillageLayout";
 import { ColliderSystem } from "./ColliderSystem";
 import { GLBMap } from "./GLBMap";
+import { CombatVFX, spawnHitSplash, spawnAttackBlink, spawnAoEPop, spawnProjectile } from "./CombatVFX";
+import { ELEMENT_COLORS, type Element } from "../engine/types/weaponSkills";
 import {
   generateIslandTerrain,
   colorTerrainByHeight,
@@ -257,10 +259,21 @@ function PlayerCharacter({ groupRef, terrainMesh }: {
       }
     }
 
-    // Combat
-    if (snap.actions.skill1) engine.sm.transition(STATE.ATTACK_1);
-    if (snap.actions.skill2) engine.sm.transition(STATE.ATTACK_2);
-    if (snap.actions.skill3) engine.sm.transition(STATE.ATTACK_3);
+    // Combat — with VFX on attack
+    if (snap.actions.skill1) {
+      engine.sm.transition(STATE.ATTACK_1);
+      spawnAttackBlink(engine.pos.clone().setY(engine.pos.y + 1), "physical");
+    }
+    if (snap.actions.skill2) {
+      engine.sm.transition(STATE.ATTACK_2);
+      spawnAttackBlink(engine.pos.clone().setY(engine.pos.y + 1), "physical");
+    }
+    if (snap.actions.skill3) {
+      engine.sm.transition(STATE.ATTACK_3);
+      // Finisher gets AoE pop ring
+      spawnAoEPop(engine.pos.clone(), "physical", 3);
+      spawnAttackBlink(engine.pos.clone().setY(engine.pos.y + 1), "fire");
+    }
     if (snap.held.block) engine.sm.transition(STATE.BLOCK);
     else if (engine.sm.state === STATE.BLOCK) engine.sm.rest();
     if (snap.actions.jump) engine.sm.transition(STATE.JUMP);
@@ -410,15 +423,25 @@ function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh, navGrid }: {
         }
       }
 
-      // Hit detection
+      // Hit detection — with VFX on damage
       const pe = playerRef.current?.userData?.entity as CombatEntity | undefined;
       if (pe) {
         const dmg = tryDamage(engine.entity, pe);
-        if (dmg > 0) store.getState().damagePlayer(dmg);
+        if (dmg > 0) {
+          store.getState().damagePlayer(dmg);
+          // Splash VFX at player hit position
+          spawnHitSplash(pe.position.clone().setY(pe.position.y + 0.8), "physical");
+        }
         const pDmg = tryDamage(pe, engine.entity);
         if (pDmg > 0) {
           store.getState().damageEnemy(engine.entity.id, pDmg);
-          if (engine.entity.hp <= 0) store.getState().addKill();
+          // Splash VFX at enemy hit position
+          spawnHitSplash(engine.entity.position.clone().setY(engine.entity.position.y + 0.8), "physical");
+          if (engine.entity.hp <= 0) {
+            store.getState().addKill();
+            // Death pop effect
+            spawnAoEPop(engine.entity.position.clone(), "dark", 3);
+          }
         }
       }
     }
@@ -531,6 +554,9 @@ function ForgeInner() {
           <HarvestableScatter terrainMesh={terrainMesh} />
         </>
       )}
+
+      {/* Combat VFX layer (projectiles + particles) */}
+      <CombatVFX />
 
       {/* Player */}
       <PlayerCharacter groupRef={playerRef} terrainMesh={terrainMesh} />
