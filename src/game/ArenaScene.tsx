@@ -23,7 +23,7 @@ import { CharacterStateMachine, STATE } from "../engine/CharacterStateMachine";
 import { AIBrain } from "./AIBrain";
 import { tryDamage, tickIFrames, consumeKnockback, createCombatEntity, type CombatEntity } from "./HealthSystem";
 import { NavGrid } from "./NavGrid";
-import { FBXCharacter } from "./FBXCharacter";
+import { GLBCharacter } from "./GLBCharacter";
 import { getAllCharacterDefs, type GrudgeCharacterDef } from "./GrudgeClasses";
 import { VillageLayout } from "./VillageLayout";
 import { ColliderSystem } from "./ColliderSystem";
@@ -312,9 +312,8 @@ function PlayerCharacter({ groupRef, terrainMesh }: {
       </mesh>
       {/* Real FBX character model */}
       {charDef && (
-        <FBXCharacter
+        <GLBCharacter
           modelUrl={charDef.race.modelUrl}
-          textureUrl={charDef.race.textureUrl}
           visibleMeshes={charDef.preset.visibleMeshes}
           animPack={charDef.cls.animPack}
           tintColor={charDef.cls.color}
@@ -462,9 +461,8 @@ function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh, navGrid }: {
         <meshBasicMaterial />
       </mesh>
       {/* Real FBX enemy model */}
-      <FBXCharacter
+      <GLBCharacter
         modelUrl={enemyDef.race.modelUrl}
-        textureUrl={enemyDef.race.textureUrl}
         visibleMeshes={enemyDef.preset.visibleMeshes}
         animPack={enemyDef.cls.animPack}
         tintColor={enemyDef.cls.color}
