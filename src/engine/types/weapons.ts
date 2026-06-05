@@ -91,7 +91,8 @@ export const HAND_BONE: Record<WeaponHand, string | string[]> = {
 
 // ── Craftpix weapon generator ───────────────────────────────────────────────
 
-const CPX_CDN = "https://assets.grudge-studio.com/weapons/craftpix";
+// Route through Vercel proxy to avoid CORS
+const CPX_CDN = import.meta.env.PROD ? "/api/assets/weapons/craftpix" : "/weapons/craftpix";
 
 /** Default scale for craftpix models (they're large FBX exports → GLB) */
 const CPX_SCALES: Record<string, number> = {

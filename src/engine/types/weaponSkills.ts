@@ -50,7 +50,8 @@ export const ELEMENT_COLORS: Record<Element, string> = {
 
 // ── Skill definition ──────────────────────────────────────────────────────────
 
-const CDN = "https://assets.grudge-studio.com/icons";
+// Route through Vercel proxy (/api/assets → assets.grudge-studio.com) to avoid CORS
+const CDN = import.meta.env.PROD ? "/api/assets/icons" : "/icons";
 
 export interface SkillDef {
   key:         string;
