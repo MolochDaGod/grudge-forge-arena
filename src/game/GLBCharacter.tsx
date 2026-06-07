@@ -3,12 +3,12 @@
  *
  * Loads a Grudge 6 race GLB character model from R2 CDN.
  * GLB files are pre-baked with:
- *   - Meter scale (1:1, no 0.01 hack)
  *   - Embedded PNG textures (no separate TGA loading)
  *   - PBR materials (MeshStandardMaterial)
  *   - Preserved mesh names for gear visibility toggling
  *
  * Applies:
+ *   - Scale correction (default 0.01 — FBX-origin centimeter assets)
  *   - Gear preset mesh visibility (show only preset's meshes)
  *   - Weapon-specific animation set via AnimController
  *   - Wires AnimController into a CharacterStateMachine
@@ -95,16 +95,18 @@ export interface GLBCharacterProps {
   animPack: string;
   /** Callback with the AnimController + StateMachine once ready. */
   onReady?: (ctrl: AnimController, sm: CharacterStateMachine) => void;
+  /** Scale multiplier (default 0.01 — FBX-origin centimeter assets → meters). */
+  scale?: number;
   /** Class color for fallback tint if model has no texture. */
   tintColor?: string;
 }
 
 /**
  * GLBCharacter — loads a Grudge 6 GLB character model,
- * applies gear-preset mesh visibility, loads animations,
+ * applies scale + gear-preset mesh visibility, loads animations,
  * and updates the mixer every frame.
  *
- * No scale hack needed — GLB is already in meters.
+ * 2m barbarian reference height — scale 0.01 converts cm-space GLBs to meters.
  */
 export function GLBCharacter({
   modelUrl,
@@ -112,13 +114,18 @@ export function GLBCharacter({
   visibleMeshes,
   animPack,
   onReady,
+  scale = 0.01,
   tintColor,
 }: GLBCharacterProps) {
   const groupRef = useRef<THREE.Group>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  const visibleSet = useMemo(() => new Set(visibleMeshes), [visibleMeshes]);
+  // Case-insensitive mesh name matching for gear preset visibility
+  const visibleSetLower = useMemo(
+    () => new Set(visibleMeshes.map((n) => n.toLowerCase())),
+    [visibleMeshes],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -128,11 +135,14 @@ export function GLBCharacter({
       const model = await loadGLB(modelUrl);
       if (cancelled) return;
 
-      // 2. Apply mesh visibility for gear preset
+      // 2. Scale model (FBX-origin assets are in centimeters)
+      model.scale.setScalar(scale);
+
+      // 3. Apply mesh visibility for gear preset (case-insensitive)
       let meshCount = 0;
       model.traverse((child) => {
         if (!(child instanceof THREE.Mesh)) return;
-        child.visible = visibleSet.has(child.name);
+        child.visible = visibleSetLower.has(child.name.toLowerCase());
         if (child.visible) {
           child.castShadow = true;
           child.receiveShadow = true;
@@ -140,7 +150,19 @@ export function GLBCharacter({
         }
       });
 
-      // 3. If a variant texture URL was provided, override the embedded texture
+      // Fallback: if no meshes matched the preset, show ALL meshes
+      // so the character still renders instead of being invisible
+      if (meshCount === 0) {
+        model.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            child.visible = true;
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
+      }
+
+      // 4. If a variant texture URL was provided, override the embedded texture
       if (textureUrl) {
         try {
           const texLoader = new THREE.TextureLoader();
@@ -161,7 +183,7 @@ export function GLBCharacter({
         }
       }
 
-      // 4. Fallback tint if no texture at all
+      // 5. Fallback tint if no texture at all
       if (tintColor) {
         model.traverse((child) => {
           if (child instanceof THREE.Mesh && child.visible) {
@@ -177,22 +199,22 @@ export function GLBCharacter({
         });
       }
 
-      // 5. Create AnimationMixer and AnimController
+      // 6. Create AnimationMixer and AnimController
       const mixer = new THREE.AnimationMixer(model);
       mixerRef.current = mixer;
 
       const ctrl = new AnimController(mixer);
 
-      // 6. Register stub clips first
+      // 7. Register stub clips first
       for (const key of STUB_KEYS) {
         ctrl.register(key, createStubClip(key));
       }
 
-      // 7. Create state machine
+      // 8. Create state machine
       const sm = new CharacterStateMachine(ctrl);
       sm.transition("idle");
 
-      // 8. Mount into scene
+      // 9. Mount into scene
       if (groupRef.current) {
         while (groupRef.current.children.length > 0) {
           groupRef.current.remove(groupRef.current.children[0]);
@@ -203,7 +225,7 @@ export function GLBCharacter({
       setLoaded(true);
       onReady?.(ctrl, sm);
 
-      // 9. Load real animations async (replaces stubs)
+      // 10. Load real animations async (replaces stubs)
       const animMap = getAnimMapForWeapon(animPack);
       const animEntries = Object.entries(animMap);
 
@@ -229,7 +251,7 @@ export function GLBCharacter({
 
     init();
     return () => { cancelled = true; };
-  }, [modelUrl, textureUrl, animPack, visibleSet, tintColor, onReady]);
+  }, [modelUrl, textureUrl, animPack, scale, visibleSetLower, tintColor, onReady]);
 
   // ── Update mixer every frame ──
   useFrame((_, delta) => {

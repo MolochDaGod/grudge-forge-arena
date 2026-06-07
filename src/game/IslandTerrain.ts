@@ -85,7 +85,7 @@ const DEFAULT_CONFIG: IslandConfig = {
   size: 160,
   resolution: 192,
   seed: 42,
-  maxHeight: 2.5,
+  maxHeight: 10,
   waterLevel: -0.3,
 };
 
@@ -137,16 +137,16 @@ export function colorTerrainByHeight(geo: THREE.BufferGeometry, maxHeight: numbe
   const pos = geo.attributes.position;
   const colors = new Float32Array(pos.count * 3);
 
-  // Color ramp: water → sand → grass → dirt → rock (flatter terrain, lower thresholds)
+  // Color ramp: water → sand → grass → dirt → rock (scaled for 10m maxHeight)
   const ramp: [number, number, number, number][] = [
     [-1,   0.18, 0.30, 0.45],  // deep water — dark blue
     [-0.1, 0.50, 0.46, 0.34],  // wet sand
     [0.0,  0.58, 0.52, 0.38],  // sand — warm tan
-    [0.15, 0.32, 0.48, 0.24],  // grass — muted green
-    [0.6,  0.26, 0.42, 0.20],  // deeper grass
-    [1.2,  0.38, 0.35, 0.28],  // dirt — brown
-    [1.8,  0.45, 0.42, 0.40],  // rock — grey
-    [2.5,  0.52, 0.50, 0.48],  // high rock
+    [0.5,  0.32, 0.48, 0.24],  // grass — muted green
+    [2.0,  0.26, 0.42, 0.20],  // deeper grass
+    [4.0,  0.38, 0.35, 0.28],  // dirt — brown
+    [7.0,  0.45, 0.42, 0.40],  // rock — grey
+    [10.0, 0.52, 0.50, 0.48],  // high rock / peak
   ];
 
   for (let i = 0; i < pos.count; i++) {

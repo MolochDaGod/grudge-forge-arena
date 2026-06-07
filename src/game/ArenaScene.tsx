@@ -43,7 +43,7 @@ const collider = new ColliderSystem();
 // ── Constants ──
 const ISLAND_SIZE = 160;
 const PLAYER_SPEED = 6;
-const CAMERA_OFFSET = new THREE.Vector3(0, 6, 10);
+const CAMERA_OFFSET = new THREE.Vector3(0, 4, 8);
 const ENEMY_COUNT = 5;
 
 // ── Pre-compute enemy class assignments (deterministic per slot) ──
@@ -77,8 +77,8 @@ function IslandTerrainMesh({ onReady }: { onReady: (mesh: THREE.Mesh) => void })
   const meshRef = useRef<THREE.Mesh>(null);
 
   const geo = useMemo(() => {
-    const g = generateIslandTerrain({ size: ISLAND_SIZE, resolution: 192, seed: 42, maxHeight: 2.5 });
-    colorTerrainByHeight(g, 2.5);
+    const g = generateIslandTerrain({ size: ISLAND_SIZE, resolution: 192, seed: 42, maxHeight: 10 });
+    colorTerrainByHeight(g, 10);
     return g;
   }, []);
 
@@ -140,23 +140,23 @@ function NatureScatter({ terrainMesh }: { terrainMesh: THREE.Mesh | null }) {
     <group>
       {positions.map((pos, i) => {
         const isTree = i % 3 !== 0;
-        const scale = 0.4 + Math.random() * 0.6;
+        const scale = 0.5 + Math.random() * 0.7;
         return isTree ? (
           <group key={i} position={pos} scale={scale}>
-            {/* Simple tree: trunk + foliage */}
-            <mesh castShadow position={[0, 0.8, 0]}>
-              <cylinderGeometry args={[0.1, 0.15, 1.6, 5]} />
+            {/* Tree: trunk + foliage (scaled for 2m character reference) */}
+            <mesh castShadow position={[0, 1.5, 0]}>
+              <cylinderGeometry args={[0.15, 0.25, 3.0, 5]} />
               <meshStandardMaterial color="#4a3520" roughness={0.9} />
             </mesh>
-            <mesh castShadow position={[0, 2.0, 0]}>
-              <coneGeometry args={[0.8, 1.8, 6]} />
+            <mesh castShadow position={[0, 4.2, 0]}>
+              <coneGeometry args={[1.5, 3.8, 6]} />
               <meshStandardMaterial color="#1a5a2a" roughness={0.8} />
             </mesh>
           </group>
         ) : (
-          <mesh key={i} position={pos} scale={scale * 0.6} castShadow
+          <mesh key={i} position={pos} scale={scale} castShadow
             rotation={[Math.random() * 0.3, Math.random() * Math.PI, 0]}>
-            <dodecahedronGeometry args={[0.5, 0]} />
+            <dodecahedronGeometry args={[0.7, 0]} />
             <meshStandardMaterial color="#5a5a58" roughness={0.9} />
           </mesh>
         );
@@ -305,9 +305,9 @@ function PlayerCharacter({ groupRef, terrainMesh }: {
 
   return (
     <group ref={groupRef} position={[0, 2, 10]}>
-      {/* Invisible collision capsule for hit detection */}
+      {/* Invisible collision capsule for hit detection (2m character) */}
       <mesh visible={false}>
-        <capsuleGeometry args={[0.4, 1.0, 4, 8]} />
+        <capsuleGeometry args={[0.35, 1.3, 4, 8]} />
         <meshBasicMaterial />
       </mesh>
       {/* Real FBX character model */}
@@ -455,9 +455,9 @@ function EnemyNPC({ index, spawnAngle, playerRef, terrainMesh, navGrid }: {
 
   return (
     <group ref={groupRef} position={[spawn.sx, 0.05, spawn.sz]}>
-      {/* Invisible collision capsule */}
+      {/* Invisible collision capsule (2m character) */}
       <mesh visible={false}>
-        <capsuleGeometry args={[0.4, 1.0, 4, 8]} />
+        <capsuleGeometry args={[0.35, 1.3, 4, 8]} />
         <meshBasicMaterial />
       </mesh>
       {/* Real FBX enemy model */}
@@ -526,7 +526,7 @@ function ForgeInner() {
           shadow-mapSize={[2048, 2048]}
           shadow-camera-left={-50} shadow-camera-right={50}
           shadow-camera-top={50} shadow-camera-bottom={-50}
-          shadow-camera-near={1} shadow-camera-far={120}
+      shadow-camera-near={1} shadow-camera-far={160}
         />
       )}
       <hemisphereLight args={[
